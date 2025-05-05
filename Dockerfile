@@ -1,15 +1,17 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+
 WORKDIR /src
 
-COPY ["CarSureBot.sln", "./"]
-COPY ["CarSureBot/CarSureBot.csproj", "CarSureBot/"]
+COPY ["CarSureBotDotNet.sln", "./"]
+COPY ["CarSureBotDotNet/CarSureBotDotNet.csproj", "CarSureBotDotNet/"]
 
-RUN dotnet restore "CarSureBot.sln"
+RUN dotnet restore "CarSureBotDotNet.sln"
 
-RUN dotnet publish "CarSureBot/CarSureBot.csproj" -c Release -o /app
+RUN dotnet publish "CarSureBotDotNet/CarSureBotDotNet.csproj" -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
+
 COPY --from=build /app .
 
-ENTRYPOINT ["dotnet", "CarSureBot.dll"]
+ENTRYPOINT ["dotnet", "CarSureBotDotNet.dll"]
