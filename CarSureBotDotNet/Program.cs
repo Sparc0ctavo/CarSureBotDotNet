@@ -8,7 +8,7 @@ namespace CarSureBot
 {
     internal class Program
     {
-        static async Task Main(string[] args)
+        public static async Task Main(string[] args)
         {
             Console.InputEncoding = Encoding.UTF8;
             Console.OutputEncoding = Encoding.UTF8;
