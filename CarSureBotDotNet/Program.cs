@@ -9,7 +9,6 @@ namespace CarSureBotDotNet
         {
             Console.InputEncoding = Encoding.UTF8;
             Console.OutputEncoding = Encoding.UTF8;
-            Env.Load();
 
             CarSureBot carSureBot = new CarSureBot();
 
