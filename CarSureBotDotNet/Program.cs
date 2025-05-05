@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using DotNetEnv;
 
 namespace CarSureBotDotNet
 {
@@ -8,6 +9,9 @@ namespace CarSureBotDotNet
         {
             Console.InputEncoding = Encoding.UTF8;
             Console.OutputEncoding = Encoding.UTF8;
+
+            
+            Env.Load("C:\\Users\\malya\\source\\repos\\CarSureBotDotNet\\CarSureBotDotNet\\.env");
 
             CarSureBot carSureBot = new CarSureBot();
 
