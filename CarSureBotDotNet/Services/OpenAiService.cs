@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using OpenAI;
 using OpenAI.Chat;
 
-namespace CarSureBot
+namespace CarSureBotDotNet
 {
     internal class OpenAiService
     {

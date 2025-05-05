@@ -13,7 +13,7 @@ using Mindee.Product.Passport;
 using Telegram.Bot.Types;
 using static System.Net.Mime.MediaTypeNames;
 
-namespace CarSureBot
+namespace CarSureBotDotNet
 {
     internal class MindeeService
     {

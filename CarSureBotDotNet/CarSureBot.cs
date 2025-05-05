@@ -15,7 +15,7 @@ using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-namespace CarSureBot
+namespace CarSureBotDotNet
 {
     internal class CarSureBot
     {
