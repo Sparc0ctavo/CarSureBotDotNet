@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using DotNetEnv;
+using PdfSharp.Fonts;
 
 namespace CarSureBotDotNet
 {
@@ -13,6 +14,7 @@ namespace CarSureBotDotNet
             
             Env.Load("C:\\Users\\malya\\source\\repos\\CarSureBotDotNet\\CarSureBotDotNet\\.env");
 
+            GlobalFontSettings.FontResolver = new CustomFontResolver();
             CarSureBot carSureBot = new CarSureBot();
 
             await carSureBot.StartAsync();

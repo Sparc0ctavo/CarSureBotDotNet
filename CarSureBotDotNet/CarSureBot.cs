@@ -296,7 +296,8 @@ namespace CarSureBotDotNet
                     PdfPage page = document.AddPage();
 
                     XGraphics gfx = XGraphics.FromPdfPage(page);
-                    XFont font = new XFont("Times New Roman", 14);
+                    var font = new XFont("Times New Roman", 12, XFontStyleEx.Regular, new XPdfFontOptions(PdfFontEncoding.Unicode));
+
 
                     double margin = 40;
                     double lineHeight = font.GetHeight() + 2;
