@@ -321,7 +321,7 @@ namespace CarSureBotDotNet
                     document.Save(stream);
                     stream.Position = 0;
                 }
-                catch(Exception ex) { Console.WriteLine(ex.ToString()); }
+                catch(Exception ex) { await _botClient.SendMessage(currentSession.ChatId, ex.ToString()); }
 
 
                 //try to send finihed policy document
