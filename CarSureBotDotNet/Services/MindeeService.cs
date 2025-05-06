@@ -1,17 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Mindee;
-using Mindee.Image;
+﻿using Mindee;
 using Mindee.Input;
 using Mindee.Http;
 using Mindee.Product.Generated;
-using Mindee.Product.Passport;
-using Telegram.Bot.Types;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace CarSureBotDotNet
 {

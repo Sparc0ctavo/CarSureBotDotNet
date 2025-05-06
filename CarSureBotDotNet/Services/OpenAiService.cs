@@ -1,11 +1,4 @@
-﻿using System;
-using System.ClientModel;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using OpenAI;
-using OpenAI.Chat;
+﻿using OpenAI.Chat;
 
 namespace CarSureBotDotNet
 {

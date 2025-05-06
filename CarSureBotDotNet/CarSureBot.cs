@@ -1,16 +1,7 @@
 ﻿using OpenAI.Chat;
-using PdfSharp.Charting;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Telegram.Bot;
-using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -288,43 +279,49 @@ namespace CarSureBotDotNet
             string gptResponse = await OpenAiResponseAsync(currentSession, prompt);
             Console.WriteLine("Document content: " + gptResponse);
 
-
+            
             using (var stream = new MemoryStream())
             {
-                var inputFile = new InputFileStream(stream, "InsurancePolicy.pdf");
-
-                PdfDocument document = new PdfDocument();
-
-
-                document.Info.Title = "Car Insurance Policy";
-
-                PdfPage page = document.AddPage();
-
-                XGraphics gfx = XGraphics.FromPdfPage(page);
-                XFont font = new XFont("Times New Roman", 14);
-
-                double margin = 40;
-                double lineHeight = font.GetHeight() + 2;
-                double yPoint = margin;
-
-                string[] lines = gptResponse.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-
-                foreach (string line in lines)
+                try
                 {
 
-                    if (yPoint + lineHeight > page.Height - margin)
+
+                    var inputFile = new InputFileStream(stream, "InsurancePolicy.pdf");
+
+                    PdfDocument document = new PdfDocument();
+
+
+                    document.Info.Title = "Car Insurance Policy";
+
+                    PdfPage page = document.AddPage();
+
+                    XGraphics gfx = XGraphics.FromPdfPage(page);
+                    XFont font = new XFont("Times New Roman", 14);
+
+                    double margin = 40;
+                    double lineHeight = font.GetHeight() + 2;
+                    double yPoint = margin;
+
+                    string[] lines = gptResponse.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+                    foreach (string line in lines)
                     {
-                        page = document.AddPage();
-                        gfx = XGraphics.FromPdfPage(page);
-                        yPoint = margin;
+
+                        if (yPoint + lineHeight > page.Height - margin)
+                        {
+                            page = document.AddPage();
+                            gfx = XGraphics.FromPdfPage(page);
+                            yPoint = margin;
+                        }
+
+                        gfx.DrawString(line, font, XBrushes.Black, new XRect(margin, yPoint, page.Width - 2 * margin, lineHeight), XStringFormats.TopLeft);
+                        yPoint += lineHeight;
                     }
 
-                    gfx.DrawString(line, font, XBrushes.Black, new XRect(margin, yPoint, page.Width - 2 * margin, lineHeight), XStringFormats.TopLeft);
-                    yPoint += lineHeight;
+                    document.Save(stream);
+                    stream.Position = 0;
                 }
-
-                document.Save(stream);
-                stream.Position = 0;
+                catch(Exception ex) { Console.WriteLine(ex.ToString()); }
 
 
                 //try to send finihed policy document
