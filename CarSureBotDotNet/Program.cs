@@ -18,6 +18,8 @@ namespace CarSureBotDotNet
             CarSureBot carSureBot = new CarSureBot();
 
             await carSureBot.StartAsync();
+
+            return;
         }
     }
 }
