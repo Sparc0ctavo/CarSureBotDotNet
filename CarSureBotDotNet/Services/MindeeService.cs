@@ -31,11 +31,11 @@ namespace CarSureBotDotNet
 
                 string endpointName = null;
 
-                if (queueStep == 2)
+                if (queueStep == 0)
                 {
                     endpointName = "id_card";
                 }
-                else if (queueStep == 3)
+                else if (queueStep == 1)
                 {
                     endpointName = "car_title_front";
                 }

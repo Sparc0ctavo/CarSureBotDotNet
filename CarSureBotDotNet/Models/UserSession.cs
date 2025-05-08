@@ -7,6 +7,7 @@ namespace CarSureBotDotNet
         internal long ChatId { get; set; }
 
         internal short keyStepOrder;
+        internal short photoSentIterator;
         internal OpenAiService openAiApi;
         internal Dictionary<long, string> userDocumentData;
 
@@ -14,7 +15,8 @@ namespace CarSureBotDotNet
         {
 
             ChatId = chatId;
-            keyStepOrder = 0;
+            keyStepOrder = 1;
+            photoSentIterator = 0;
             openAiApi = new OpenAiService();
             userDocumentData = new Dictionary<long, string>();
 
