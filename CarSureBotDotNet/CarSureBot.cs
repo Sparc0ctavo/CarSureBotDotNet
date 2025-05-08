@@ -60,7 +60,7 @@ namespace CarSureBotDotNet
             while (_isRunning) {
                 
                 await PingChats();                              //checking for "dead" chats
-                await Task.Delay(TimeSpan.FromMinutes(5));
+                await Task.Delay(TimeSpan.FromSeconds(7));
             
             }
 
