@@ -1,5 +1,6 @@
 ﻿using OpenAI.Chat;
 using PdfSharp.Drawing;
+using PdfSharp.Internal;
 using PdfSharp.Pdf;
 using Telegram.Bot;
 using Telegram.Bot.Polling;
@@ -16,6 +17,7 @@ namespace CarSureBotDotNet
         private TelegramBotClient _botClient;
         private MindeeService _mindeeService;
         private Dictionary<string, string> _keyPrompts;
+        private Dictionary<string, string> _botMessageEmojiStatus;
         private CancellationTokenSource _cts;
         private string _bot_token;
 
@@ -36,6 +38,12 @@ namespace CarSureBotDotNet
             Console.CancelKeyPress += OnCanselKeyPress;
             _botClient.OnUpdate += OnUpdate;
             _botClient.OnError += OnError;
+
+            _botMessageEmojiStatus = new Dictionary<string, string> {
+                { "Green", "Start this message with green circle emoji(One emoji per message)."},
+                { "Red", "Start this message with red circle emoji(One emoji per message)."},
+                { "Blue", "Start this message with blue circle emoji(One emoji per message)."}
+            };
             _keyPrompts = SetKeyPrompts();
 
             Console.WriteLine("Receiving has been started! Press CTRL + C to stop receiving.");
@@ -80,6 +88,17 @@ namespace CarSureBotDotNet
                 {
                     await UpdatePhotoMessageHandler(update.Message, currentSession);
                 }
+                else if (update.Message.Type == MessageType.Animation ||
+                         update.Message.Type == MessageType.Audio ||
+                         update.Message.Type == MessageType.Document ||
+                         update.Message.Type == MessageType.Location ||
+                         update.Message.Type == MessageType.Video ||
+                         update.Message.Type == MessageType.Contact)
+                {
+                    string gptResponse = await OpenAiResponseAsync(currentSession, _keyPrompts["error2"]);
+                    await _botClient.SendMessage(currentSession.ChatId, gptResponse);
+                }
+
             }
 
         }
@@ -93,94 +112,104 @@ namespace CarSureBotDotNet
         {
             Console.WriteLine($"A text message \"{message.Text}\" recieved from {message.Chat.Username}");
 
-            string prompt = message.Text;
-            string gptResponse = prompt;
+            string prompt = message.Text + " " + _botMessageEmojiStatus["Blue"];
+            string gptResponse = await OpenAiResponseAsync(currentSession, prompt);
+            
 
             try
             {
-
-                if (currentSession.keyStepOrder == 0 && message.Text.StartsWith("/start"))
+                //checking if user requested step back(such gpt responses are marked with word "rollback" in the end)
+                if (gptResponse.Split().Last() == "rollback")
                 {
-                    prompt = _keyPrompts["language"];
-
-                    currentSession.keyStepOrder++;
+                    InitStepBack(currentSession);
                 }
-                else if (currentSession.keyStepOrder == 1)
+
+
+                if (gptResponse.Split()[0] != "null")
                 {
-
-                    string languageStr = _keyPrompts["step1"].Split(' ')[4];
-
-                    _keyPrompts["step1"] = _keyPrompts["step1"].Replace(languageStr, prompt);
-                    gptResponse = await OpenAiResponseAsync(currentSession, _keyPrompts["step1"]);
-                    await _botClient.SendMessage(currentSession.ChatId, gptResponse);
-                    prompt = _keyPrompts["step2"];
-
-                    currentSession.keyStepOrder++;
-                }
-                else if (currentSession.keyStepOrder == 5 || currentSession.keyStepOrder == 6)
-                {
-
-                    gptResponse = await OpenAiResponseAsync(currentSession, prompt);
-                    string responseStatusStr = gptResponse.Split()[0];
-
-                    Console.WriteLine("Chat GPT response: " + gptResponse);
-
-                    gptResponse = gptResponse.Substring(gptResponse.IndexOf(' ') + 1);
-
-
-                    if (responseStatusStr != "null")
+                    if (currentSession.keyStepOrder == 0)
                     {
-                        bool responseStatus = bool.Parse(responseStatusStr);
+                        await InitStep(currentSession);
+                        currentSession.keyStepOrder += 1;
+                        return;
+                    }
+                    else if (currentSession.keyStepOrder == 1)
+                    {
 
+                        //get "NULL" to replace it with language user wrote
+                        string languageStr = _keyPrompts["step1"].Split(' ')[4];
+                        _keyPrompts["step1"] = _keyPrompts["step1"].Replace(languageStr, prompt);
+                        await InitStep(currentSession);
+                        currentSession.keyStepOrder += 1;
+                        await InitStep(currentSession);
+                        return;
 
-                        if (responseStatus)
+                    }
+                    else if (currentSession.keyStepOrder == 4)
+                    {
+                        await InitStep(currentSession);
+                        currentSession.keyStepOrder += 1;
+                        return;
+                    }
+                    else if (currentSession.keyStepOrder == 5)
+                    {
+
+                        string responseStatusStr = gptResponse.Split()[0];
+                        Console.WriteLine("Chat GPT response: " + gptResponse);
+                        gptResponse = gptResponse.Substring(gptResponse.IndexOf(' ') + 1);
+
+                        if(responseStatusStr == "true" || responseStatusStr == "false")
                         {
-                            if (currentSession.keyStepOrder == 5)
-                            {
-                                currentSession.keyStepOrder++;
+                            bool responseStatus = bool.Parse(responseStatusStr);
 
-                                prompt = _keyPrompts["step4"];
+                            if (responseStatus)
+                            {
+                                await InitStep(currentSession);
+                                currentSession.keyStepOrder += 1;
+                                return;
                             }
                             else
                             {
-                                prompt = _keyPrompts["step6"];
-                                gptResponse = await OpenAiResponseAsync(currentSession, prompt);
-                                await _botClient.SendMessage(currentSession.ChatId, gptResponse);
+                                InitStepBack(currentSession);
+                            }
+                        }
 
+                    }
+                    else if (currentSession.keyStepOrder == 6)
+                    {
+
+                        string responseStatusStr = gptResponse.Split()[0];
+                        Console.WriteLine("Chat GPT response: " + gptResponse);
+                        gptResponse = gptResponse.Substring(gptResponse.IndexOf(' ') + 1);
+
+                        if (responseStatusStr == "true" || responseStatusStr == "false")
+                        {
+                            bool responseStatus = bool.Parse(responseStatusStr);
+
+                            if (responseStatus)
+                            {
+                                await InitStep(currentSession);
+
+                                currentSession.keyStepOrder++;
                                 await GenerateAndSendPDF(currentSession);
+                                currentSession.keyStepOrder++;
 
-                                prompt = _keyPrompts["step7"];
-                                gptResponse = await OpenAiResponseAsync(currentSession, prompt);
-                                await _botClient.SendMessage(currentSession.ChatId, gptResponse);
+                                await InitStep(currentSession);
 
                                 currentSession.keyStepOrder = 0;
 
                                 return;
                             }
-
                         }
-                        else
-                        {
-                            if (currentSession.keyStepOrder == 5)
-                            {
-                                currentSession.keyStepOrder -= 3;
-
-                                prompt = "ask to send documents again";
-                            }
-                        }
+                        
                     }
-                    else
-                    {
-                        await _botClient.SendMessage(currentSession.ChatId, gptResponse);
-
-                        return;
-                    }
-
-
                 }
+                
 
-
-                gptResponse = await OpenAiResponseAsync(currentSession, prompt);
+                //cutting "false"/"rollback" markers
+                gptResponse = (gptResponse.Split().Last() == "rollback") ? gptResponse = gptResponse.Substring(gptResponse.LastIndexOf(' ')) : gptResponse;
+                gptResponse = (gptResponse.Split()[0] == "false" || gptResponse.Split()[0] == "null" || gptResponse.Split()[0] == "true") ? gptResponse = gptResponse.Substring(gptResponse.IndexOf(' ') + 1) : gptResponse;
+                
                 await _botClient.SendMessage(currentSession.ChatId, gptResponse);
 
             }
@@ -212,22 +241,44 @@ namespace CarSureBotDotNet
                     }
 
 
-                    mindeeResponseText += "\nTranslate these field's keys in language of YOUR previous text message. The user has to understand the content of it.(And don't say anything like \"Of course! Here are your translated fields\". Just do what I Asked)";
+                    mindeeResponseText += "\nTranslate these field's keys in language of YOUR previous text message. The user has to understand the content of it." +
+                        "(And don't say anything like \"Of course! Here are your translated fields\". Just do what I Asked). And " + _botMessageEmojiStatus["Green"];
+
                     currentSession.openAiApi._messages.Add(new SystemChatMessage(mindeeResponseText));
                     gptResponse = await OpenAiResponseAsync(currentSession, mindeeResponseText);
                     await _botClient.SendMessage(currentSession.ChatId, gptResponse);
 
-                    if (currentSession.keyStepOrder == 4)
-                    {
-                        var prompt = _keyPrompts["step3"];
-                        gptResponse = await OpenAiResponseAsync(currentSession, prompt);
-                        await _botClient.SendMessage(currentSession.ChatId, gptResponse);
+                    
+                    if(currentSession.keyStepOrder == 4) {
+                        await InitStep(currentSession);
+                        currentSession.keyStepOrder++;
+                        return;
                     }
                     currentSession.keyStepOrder++;
+
+                }
+                else {
+                    var response = await OpenAiResponseAsync(currentSession, _keyPrompts["error1"]);
+                    await _botClient.SendMessage(currentSession.ChatId, response); 
                 }
 
             }
-            catch (Exception ex) { Console.WriteLine(ex.ToString()); }
+            catch (Exception ex) { Console.WriteLine("UpdatePhotoMessageHandler(): " + ex.ToString()); }
+        }
+
+        private async Task InitStep(UserSession currentSession)
+        {
+            var prompt = _keyPrompts[$"step{currentSession.keyStepOrder}"];
+            var gptRespone = await OpenAiResponseAsync(currentSession, prompt);
+            await _botClient.SendMessage(currentSession.ChatId, gptRespone);
+        }
+
+        private void InitStepBack(UserSession currentSession)
+        {
+            if (currentSession.keyStepOrder == 2) { currentSession.keyStepOrder -= 2; return; }
+            else if (currentSession.keyStepOrder == 3) { currentSession.keyStepOrder -= 1; return; }
+            else if (currentSession.keyStepOrder == 4) { currentSession.keyStepOrder -= 2; return; }
+            else if (currentSession.keyStepOrder == 5) { currentSession.keyStepOrder -= 3; return; }
         }
 
         private async Task<byte[]> ExtractPhoto(PhotoSize photoSize)
@@ -258,15 +309,17 @@ namespace CarSureBotDotNet
         {
             var dictionary = new Dictionary<string, string>();
 
-            dictionary.Add("language", "Suggest to choose and write client's language. Write \"Choose and write your language.\" 3 times: in Ukrainian, English and German(Add flags of these countries in the end of each frase). In the end tell user that he can still choose any language besides these 3(tell it in English).");
-            dictionary.Add("step1", $"Introduce yourself in language: NULL. You are the telegram bot that helps people purchasing car insurances. Your name is \"Car? Sure!\" so you can make 1-line marketing verse with it.");
-            dictionary.Add("step2", "Ask user to submit photos of his documents in next order: 1. Personal ID Card(Front side). 2. Vehicle Registration Document(Front side). 3. Vehicle Registration Document(Back side). Remind that folow this order is necessary for correct data reading.");
-            dictionary.Add("step3", "Ask user to confirm that all data was taken correctly. IF his response you consider to be positive, make YOUR next message starts with \"true\" without any uppercases and special symbols, and separate it only with white space. BUT IF you consider it to be negative, in the same way start your message with \"false\". IF user's response sounds not related to the question, start your response with \"null\".");
-            dictionary.Add("step4", "Tell user a price of insuranse policy (100$) and ask user if they agree with the price. IF the user disagrees, the bot should apologize and explain that 100 USD is the only available price. If the user agrees, make YOUR next message starts with \"true\" and proceed to the final step. IF user's response sounds not related to the question, ignore it and politely insist on direct response.");
-            dictionary.Add("step5", "Generate a structured text document in Makefile format that represents an auto insurance policy.(ONLY Makefile, do not add any additional text from you please) Use these fields: ");
-            dictionary.Add("step6", "Say that you generating a file and finish sentence with three dots");
-            dictionary.Add("step7", "Say that we've done, ask if he has some questions and tell him that if he wants to repeat the procedure, he has to send you \"/start\" command.");
-            dictionary.Add("error", "Say that some problem occured while processing message. But without any links please.");
+            dictionary.Add("step0", "Suggest to choose and write client's language. Write \"Choose and write your language.\" 3 times: in Ukrainian, English and German(Add flags of these countries in the end of each frase). In the end tell user that he can still choose any language besides these 3(tell it in English)." + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step1", "Introduce yourself in language: NULL (Even if user didn't response directly, analyze the language he used, then define it by your own and ignore his message itself, just keep introducing yourself). You are the telegram bot that helps people purchasing car insurances. Your name is \"Car? Sure!\" so you can make 1-line marketing verse with it." + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step2", "Ask user to submit photos of his documents in next order: 1. Personal ID Card(Front side). 2. Vehicle Registration Document(Front side). 3. Vehicle Registration Document(Back side). Remind that folow this order is necessary for correct data reading." + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step4", "Ask user to confirm that all data was taken correctly. IF his response you consider to be positive, make YOUR next message starts with \"true\" without any uppercases and special symbols, and separate it only with white space. BUT IF you consider it to be negative, in the same way start your message with \"false\"(without white space before word false but with space right after) and you have to ask him to send documents again. IF user's response sounds not related to the question, start your response with \"null\"." + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step5", "Tell user a price of insuranse policy (100$) and ask user if they agree with the price. IF the user disagrees, the bot should apologize and explain that 100 USD is the only available price. If the user agrees, make YOUR next message starts with \"true\" and proceed to the final step." +
+                           " If disagrees, YOUR next message starts with \"false\". IF user's response sounds not related to the question, politely insist on direct response. And start answer with \"null\". Keep going with these start words until user's positive answer." + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step6", "Say that you generating a file and finish sentence with three dots. " + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step7", "Generate a structured text document in Makefile format that represents an auto insurance policy.(ONLY Makefile, do not add any additional text from you please) Use these fields: ");
+            dictionary.Add("step8", "Say that we've done, ask if he has some questions and tell him that if he wants to repeat the procedure, he has to send you \"/start\" command." + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("error1", "Say that some problem occured while processing message." + _botMessageEmojiStatus["Red"]);
+            dictionary.Add("error2", "Say that you can handle only text and photo messages." + _botMessageEmojiStatus["Red"]);
 
             return dictionary;
         }
@@ -274,7 +327,7 @@ namespace CarSureBotDotNet
         private async Task GenerateAndSendPDF(UserSession currentSession)
         {
 
-            string prompt = _keyPrompts["step5"] + "\n" + currentSession.ToStringUserDocumentData();
+            string prompt = _keyPrompts["step7"] + "\n" + currentSession.ToStringUserDocumentData();
             Console.WriteLine("Document prompt: " + prompt);
             string gptResponse = await OpenAiResponseAsync(currentSession, prompt);
             Console.WriteLine("Document content: " + gptResponse);
