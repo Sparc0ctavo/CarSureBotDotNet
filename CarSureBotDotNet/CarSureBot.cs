@@ -3,6 +3,7 @@ using PdfSharp.Drawing;
 using PdfSharp.Internal;
 using PdfSharp.Pdf;
 using Telegram.Bot;
+using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -39,6 +40,7 @@ namespace CarSureBotDotNet
             _botClient.OnUpdate += OnUpdate;
             _botClient.OnError += OnError;
 
+            //for circle emojis
             _botMessageEmojiStatus = new Dictionary<string, string> {
                 { "Green", "Start this message with green circle emoji(One emoji per message)."},
                 { "Red", "Start this message with red circle emoji(One emoji per message)."},
@@ -48,7 +50,12 @@ namespace CarSureBotDotNet
 
             Console.WriteLine("Receiving has been started! Press CTRL + C to stop receiving.");
 
-            while (_isRunning) { await Task.Delay(1000); }
+            while (_isRunning) {
+                
+                await PingChats();                              //checking for "dead" chats
+                await Task.Delay(TimeSpan.FromMinutes(5));
+            
+            }
 
             await StopAsync();
         }
@@ -61,46 +68,74 @@ namespace CarSureBotDotNet
         private async Task OnUpdate(Update update)
         {
 
-            if (update.Type == UpdateType.Message)
+            UserSession currentSession; //User's session instance
+
+            
+                
+                if (update.Type == UpdateType.Message)
+                {
+
+                    
+                    //validates if such user's session exists(if not creates new one)
+                    if (_sessions.Count == 0 || !_sessions.Any(x => x.ChatId == update.Message.Chat.Id))
+                    {
+                        _sessions.Add(new UserSession(update.Message.Chat.Id));
+                        currentSession = _sessions.Last();
+                        await currentSession.openAiApi.SetBehaviorPattern();
+                    }
+                    else
+                    {
+                        currentSession = _sessions.Find(x => x.ChatId == update.Message.Chat.Id);
+                    }
+
+                
+                    if (update.Message.Type == MessageType.Text)
+                    {
+                        await UpdateTextMessageHandler(update.Message, currentSession);
+                    }
+                    else if (update.Message.Type == MessageType.Photo)
+                    {
+                        await UpdatePhotoMessageHandler(update.Message, currentSession);
+                    }
+                    else if (update.Message.Type == MessageType.Animation ||
+                             update.Message.Type == MessageType.Audio ||
+                             update.Message.Type == MessageType.Document ||
+                             update.Message.Type == MessageType.Location ||
+                             update.Message.Type == MessageType.Video ||
+                             update.Message.Type == MessageType.Contact)
+                    {
+                        string gptResponse = await OpenAiResponseAsync(currentSession, _keyPrompts["error2"]);
+                        await _botClient.SendMessage(currentSession.ChatId, gptResponse);
+                    }
+                }
+                            
+
+        }
+
+        private async Task PingChats()
+        {
+
+            if(_sessions.Count > 0)
             {
+                UserSession currentSession = null;
 
-                UserSession currentSession; //User's session instance
-
-
-                //validates if such user's session exists(if not creates new one)
-                if (_sessions.Count == 0 || !_sessions.Any(x => x.ChatId == update.Message.Chat.Id))
+                try
                 {
-                    _sessions.Add(new UserSession(update.Message.Chat.Id));
-                    currentSession = _sessions.Last();
-                    await currentSession.openAiApi.SetBehaviorPattern();
+                    foreach (var session in _sessions)
+                    {
+                        currentSession = session;
+                        await _botClient.SendChatAction(session.ChatId, ChatAction.Typing);
+                    }
                 }
-                else
-                {
-                    currentSession = _sessions.Find(x => x.ChatId == update.Message.Chat.Id);
+                catch(ApiRequestException ex) {
+                    Console.WriteLine(ex.Message);
+                    _sessions.Remove(currentSession);
+                    Console.WriteLine("Session deleted.");
                 }
-
-
-                if (update.Message.Type == MessageType.Text)
-                {
-                    await UpdateTextMessageHandler(update.Message, currentSession);
-                }
-                else if (update.Message.Type == MessageType.Photo)
-                {
-                    await UpdatePhotoMessageHandler(update.Message, currentSession);
-                }
-                else if (update.Message.Type == MessageType.Animation ||
-                         update.Message.Type == MessageType.Audio ||
-                         update.Message.Type == MessageType.Document ||
-                         update.Message.Type == MessageType.Location ||
-                         update.Message.Type == MessageType.Video ||
-                         update.Message.Type == MessageType.Contact)
-                {
-                    string gptResponse = await OpenAiResponseAsync(currentSession, _keyPrompts["error2"]);
-                    await _botClient.SendMessage(currentSession.ChatId, gptResponse);
-                }
-
+                    
             }
 
+            return;
         }
 
         private async Task OnError(Exception exception, HandleErrorSource errorSource)
@@ -124,6 +159,7 @@ namespace CarSureBotDotNet
                     InitStepBack(currentSession);
                 }
 
+                //"logic markers as response polarity status indicators: true - positive, false - negative, null - neutral"
 
                 if (gptResponse.Split()[0] != "null")
                 {
@@ -154,6 +190,7 @@ namespace CarSureBotDotNet
                     else if (currentSession.keyStepOrder == 5)
                     {
 
+                        //Extracting logical marker(true/false/null)
                         string responseStatusStr = gptResponse.Split()[0];
                         Console.WriteLine("Chat GPT response: " + gptResponse);
                         gptResponse = gptResponse.Substring(gptResponse.IndexOf(' ') + 1);
@@ -171,6 +208,8 @@ namespace CarSureBotDotNet
                             else
                             {
                                 InitStepBack(currentSession);
+                                await InitStep(currentSession);
+                                return;
                             }
                         }
 
@@ -206,7 +245,7 @@ namespace CarSureBotDotNet
                 }
                 
 
-                //cutting "false"/"rollback" markers
+                //formating text by cutting "false"/"rollback" markers
                 gptResponse = (gptResponse.Split().Last() == "rollback") ? gptResponse = gptResponse.Substring(gptResponse.LastIndexOf(' ')) : gptResponse;
                 gptResponse = (gptResponse.Split()[0] == "false" || gptResponse.Split()[0] == "null" || gptResponse.Split()[0] == "true") ? gptResponse = gptResponse.Substring(gptResponse.IndexOf(' ') + 1) : gptResponse;
                 
