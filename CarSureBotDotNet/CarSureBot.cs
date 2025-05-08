@@ -261,6 +261,7 @@ namespace CarSureBotDotNet
                     if (currentSession.keyStepOrder == 2) currentStep = "Send your personal id";
                     if (currentSession.keyStepOrder == 3) currentStep = "Send your Front side of vehicle id";
                     if (currentSession.keyStepOrder == 4) currentStep = "Send your Back side of vehicle id";
+                    if (currentSession.keyStepOrder == 8) currentStep = _keyPrompts[$"step{currentSession.keyStepOrder}"];
 
                     prompt += $" And shortly remind user what he has to do now. Current step: {currentStep}. Say it more alive, like a human, not machine";
                     gptResponse = await OpenAiResponseAsync(currentSession, prompt);
