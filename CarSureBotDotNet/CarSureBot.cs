@@ -48,6 +48,13 @@ namespace CarSureBotDotNet
             };
             _keyPrompts = SetKeyPrompts();
 
+            var commands = new[]{
+
+                 new BotCommand { Command = "start", Description = "new procedure"}
+            };
+
+            await _botClient.SetMyCommands(commands);
+
             Console.WriteLine("Receiving has been started! Press CTRL + C to stop receiving.");
 
             while (_isRunning) {
@@ -158,8 +165,13 @@ namespace CarSureBotDotNet
                 {
                     InitStepBack(currentSession);
                 }
+                if (message.Text.StartsWith("/start"))
+                {
+                    currentSession.keyStepOrder = 0;
+                }
 
                 //"logic markers as response polarity status indicators: true - positive, false - negative, null - neutral"
+
 
                 if (gptResponse.Split()[0] != "null")
                 {
@@ -235,13 +247,23 @@ namespace CarSureBotDotNet
 
                                 await InitStep(currentSession);
 
-                                currentSession.keyStepOrder = 0;
-
                                 return;
                             }
                         }
                         
                     }
+                }
+                else
+                {
+                    string currentStep = _keyPrompts[$"step{currentSession.keyStepOrder-1}"];
+
+                    //exceptional key prompts that are not included in dictionary _keyPrompts and do not handling by TextHandler
+                    if (currentSession.keyStepOrder == 2) currentStep = "Send your personal id";
+                    if (currentSession.keyStepOrder == 3) currentStep = "Send your Front side of vehicle id";
+                    if (currentSession.keyStepOrder == 4) currentStep = "Send your Back side of vehicle id";
+
+                    prompt += $" And shortly remind user what he has to do now. Current step: {currentStep}. Say it more alive, like a human, not machine";
+                    gptResponse = await OpenAiResponseAsync(currentSession, prompt);
                 }
                 
 
@@ -283,16 +305,27 @@ namespace CarSureBotDotNet
                     mindeeResponseText += "\nTranslate these field's keys in language of YOUR previous text message. The user has to understand the content of it." +
                         "(And don't say anything like \"Of course! Here are your translated fields\". Just do what I Asked). And " + _botMessageEmojiStatus["Green"];
 
-                    currentSession.openAiApi._messages.Add(new SystemChatMessage(mindeeResponseText));
+                    //currentSession.openAiApi._messages.Add(new SystemChatMessage(mindeeResponseText));
                     gptResponse = await OpenAiResponseAsync(currentSession, mindeeResponseText);
                     await _botClient.SendMessage(currentSession.ChatId, gptResponse);
 
-                    
-                    if(currentSession.keyStepOrder == 4) {
+                    if (currentSession.keyStepOrder == 4)
+                    {
                         await InitStep(currentSession);
                         currentSession.keyStepOrder++;
                         return;
                     }
+
+                    //we message that we're ready to process next document
+                    string navigationPrompt = "now say that you are ready to process DOCUMENT_NAME" + _botMessageEmojiStatus["Green"];
+
+                    if (currentSession.keyStepOrder == 2) navigationPrompt = navigationPrompt.Replace("DOCUMENT_NAME", "Front side of vehicle id");
+                    if (currentSession.keyStepOrder == 3) navigationPrompt = navigationPrompt.Replace("DOCUMENT_NAME", "Back side of vehicle id");
+
+                    gptResponse = await OpenAiResponseAsync(currentSession, navigationPrompt);
+                    await _botClient.SendMessage(currentSession.ChatId, gptResponse);
+
+                    
                     currentSession.keyStepOrder++;
 
                 }
@@ -351,10 +384,10 @@ namespace CarSureBotDotNet
             dictionary.Add("step0", "Suggest to choose and write client's language. Write \"Choose and write your language.\" 3 times: in Ukrainian, English and German(Add flags of these countries in the end of each frase). In the end tell user that he can still choose any language besides these 3(tell it in English)." + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step1", "Introduce yourself in language: NULL (Even if user didn't response directly, analyze the language he used, then define it by your own and ignore his message itself, just keep introducing yourself). You are the telegram bot that helps people purchasing car insurances. Your name is \"Car? Sure!\" so you can make 1-line marketing verse with it." + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step2", "Ask user to submit photos of his documents in next order: 1. Personal ID Card(Front side). 2. Vehicle Registration Document(Front side). 3. Vehicle Registration Document(Back side). Remind that folow this order is necessary for correct data reading." + _botMessageEmojiStatus["Green"]);
-            dictionary.Add("step4", "Ask user to confirm that all data was taken correctly. IF his response you consider to be positive, make YOUR next message starts with \"true\" without any uppercases and special symbols, and separate it only with white space. BUT IF you consider it to be negative, in the same way start your message with \"false\"(without white space before word false but with space right after) and you have to ask him to send documents again. IF user's response sounds not related to the question, start your response with \"null\"." + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step4", "Ask user to confirm that all data was taken correctly and shortly remind him to pick a spot with a good light source to make clear photos. IF his response you consider to be positive, make YOUR next message starts with \"true\" without any uppercases and special symbols, and separate it only with white space. BUT IF you consider it to be negative, in the same way start your message with \"false\"(without white space before word false but with space right after) and you have to ask him to send documents again. IF user's response sounds not related to the question, start your response with \"null\"." + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step5", "Tell user a price of insuranse policy (100$) and ask user if they agree with the price. IF the user disagrees, the bot should apologize and explain that 100 USD is the only available price. If the user agrees, make YOUR next message starts with \"true\" and proceed to the final step." +
                            " If disagrees, YOUR next message starts with \"false\". IF user's response sounds not related to the question, politely insist on direct response. And start answer with \"null\". Keep going with these start words until user's positive answer." + _botMessageEmojiStatus["Green"]);
-            dictionary.Add("step6", "Say that you generating a file and finish sentence with three dots. " + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step6", "Now our step is to generate an insurance policy file if user agreed with the price. Say that you generating a file and finish sentence with three dots. " + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step7", "Generate a structured text document in Makefile format that represents an auto insurance policy.(ONLY Makefile, do not add any additional text from you please) Use these fields: ");
             dictionary.Add("step8", "Say that we've done, ask if he has some questions and tell him that if he wants to repeat the procedure, he has to send you \"/start\" command." + _botMessageEmojiStatus["Green"]);
             dictionary.Add("error1", "Say that some problem occured while processing message." + _botMessageEmojiStatus["Red"]);
