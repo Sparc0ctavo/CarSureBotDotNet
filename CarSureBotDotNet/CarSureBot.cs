@@ -264,20 +264,7 @@ namespace CarSureBotDotNet
                             
                         }
                     }
-                    else if (currentSession.keyStepOrder == 5)
-                    {
-
-                            if (responseStatusStr == "true" || responseStatusStr == "false")
-                            {
-                                responseStatus = bool.Parse(responseStatusStr);
-
-                                if (responseStatus)
-                                {
-                                    
-                                }
-                            }
-
-                    }
+                    
                 }
                 else
                 {
@@ -296,7 +283,7 @@ namespace CarSureBotDotNet
 
 
                 //formating text by cutting "false"/"rollback" markers
-                gptResponse = (gptResponse.Split().Last() == "rollback") ? gptResponse = gptResponse.Substring(gptResponse.LastIndexOf(' ')) : gptResponse;
+                gptResponse = (gptResponse.Split().Last() == "rollback" | gptResponse.Split().Last() == "group") ? gptResponse = gptResponse.Substring(gptResponse.LastIndexOf(' ')) : gptResponse;
                 gptResponse = (gptResponse.Split()[0] == "false" || gptResponse.Split()[0] == "null" || gptResponse.Split()[0] == "true") ? gptResponse = gptResponse.Substring(gptResponse.IndexOf(' ') + 1) : gptResponse;
                 
                 await _botClient.SendMessage(currentSession.ChatId, gptResponse);
@@ -418,7 +405,7 @@ namespace CarSureBotDotNet
         {
             var dictionary = new Dictionary<string, string>();
 
-            dictionary.Add("step1", "Introduce yourself in language: NULL. You are the telegram bot that helps people purchasing car insurances. Your name is \"Car? Sure!\" so you can make 1-line marketing verse with it." + _botMessageEmojiStatus["Green"]);
+            dictionary.Add("step1", "Introduce yourself in language of Telegram standart language code: NULL. You are the telegram bot that helps people purchasing car insurances. Your name is \"Car? Sure!\" so you can make 1-line marketing verse with it." + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step2", "Ask user to submit photos of his documents in next order: 1. Personal ID Card(Front side). 2. Vehicle Registration Document(Front side). Remind that folow this order is necessary for correct data reading. Instantly tell user to send his personal id(id card, etc.)" + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step21", "now shortly ask user to send DOCUMENT_NAME" + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step3", "Ask user to confirm that all data was taken correctly and shortly remind him to pick a spot with a good light source to make clear photos. IF his response you consider to be positive, make YOUR next message starts with \"true\" without any uppercases and special symbols, and separate it only with white space. BUT IF you consider it to be negative, in the same way start your message with \"false\"(without white space before word false but with space right after) and you have to ask him to send documents again. IF user's response sounds not related to the question, start your response with \"null\"." + _botMessageEmojiStatus["Green"]);
