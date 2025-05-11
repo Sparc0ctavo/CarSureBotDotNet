@@ -7,18 +7,20 @@ namespace CarSureBotDotNet
         internal long ChatId { get; set; }
 
         internal short keyStepOrder;
-        internal short photoSentIterator;
+        internal short photoSubStepIterator;
+        internal bool isDataConfirmed;   //indicator of user's response to question to confirm accuracy of read data: true - he gave any text response or it's default position; false - he did anything but text response(sent photo, voice, etc.)
         internal OpenAiService openAiApi;
-        internal Dictionary<long, string> userDocumentData;
+        internal Dictionary<long, Dictionary<short, string>> userDocumentData;
 
         public UserSession(long chatId)
         {
 
             ChatId = chatId;
             keyStepOrder = 1;
-            photoSentIterator = 0;
+            photoSubStepIterator = 0;
+            isDataConfirmed = true;
             openAiApi = new OpenAiService();
-            userDocumentData = new Dictionary<long, string>();
+            userDocumentData = new Dictionary<long, Dictionary<short, string>>();
 
         }
 
@@ -26,9 +28,10 @@ namespace CarSureBotDotNet
         {
             string content = " ";
 
-            foreach (var key in userDocumentData.Keys)
+            foreach (var key in userDocumentData[ChatId].Keys)
             {
-                content += $"\n{userDocumentData[key]}\n";
+                content += $"\n{userDocumentData[ChatId][key]}\n";
+
             }
 
             return content;

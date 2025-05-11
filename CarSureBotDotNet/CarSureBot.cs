@@ -2,6 +2,7 @@
 using PdfSharp.Drawing;
 using PdfSharp.Internal;
 using PdfSharp.Pdf;
+using System.Text.RegularExpressions;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
@@ -159,9 +160,10 @@ namespace CarSureBotDotNet
             string gptResponse = await OpenAiResponseAsync(currentSession, prompt);
 
             //Extracting logical marker(true/false/null)
-            Console.WriteLine("Chat GPT response: " + gptResponse); //Output with marker included
+            Console.WriteLine("Chat GPT response: " + gptResponse); //Console output with marker included
             string responseStatusStr = gptResponse.Split()[0];
             bool responseStatus;
+            string isGroup = gptResponse.Split().Last();
 
 
             try
@@ -174,6 +176,8 @@ namespace CarSureBotDotNet
                 if (message.Text.StartsWith("/start"))
                 {
                     currentSession.keyStepOrder = 1;
+                    currentSession.photoSubStepIterator = 0;
+                    currentSession.userDocumentData = new Dictionary<long, Dictionary<short, string>>();
                 }
 
 
@@ -187,28 +191,28 @@ namespace CarSureBotDotNet
 
                         //get "NULL" to replace it with language user uses
                         var languageCode = message.From.LanguageCode;
-                        _keyPrompts["step1"] = _keyPrompts["step1"].Replace("NULL", languageCode);
+                        _keyPrompts["step1"] = _keyPrompts["step1"].Replace("NULL", languageCode); //on last commit state, language adaptation does.n work stable.:(
                         await InitStep(currentSession, currentSession.keyStepOrder);
                         currentSession.keyStepOrder += 1;
                         await InitStep(currentSession, currentSession.keyStepOrder);
                         return;
 
                     }
-                    else if (currentSession.keyStepOrder == 2 && currentSession.photoSentIterator != 0)
+                    else if (currentSession.keyStepOrder == 2 && currentSession.photoSubStepIterator != 0)
                     {
                         
-                        string isGroup = gptResponse.Split().Last();
 
                             if (responseStatusStr == "true" || responseStatusStr == "false")
                             {
                                 responseStatus = bool.Parse(responseStatusStr);
+                                currentSession.isDataConfirmed = true;
 
                                 if (responseStatus)
                                 {
-                                    if (currentSession.photoSentIterator == 2)
+                                    if (currentSession.photoSubStepIterator == 2)
                                     {
                                         currentSession.keyStepOrder += 2;
-                                        currentSession.photoSentIterator = 0;
+                                        currentSession.photoSubStepIterator = 0;
                                         await InitStep(currentSession, currentSession.keyStepOrder);
                                         return;
                                     }
@@ -223,20 +227,21 @@ namespace CarSureBotDotNet
                                 {
                                     if (isGroup == "group")
                                     {
-                                        currentSession.photoSentIterator = 0;
+                                        currentSession.photoSubStepIterator = 0;
                                         await InitStep(currentSession, 21);
                                         return;
                                     }
                                     else
                                     {
-                                        currentSession.photoSentIterator--;
+                                        currentSession.photoSubStepIterator--;
                                         await InitStep(currentSession, 21);
                                         return;
                                     }
 
                                 
                                 
-                            }
+                                }
+
                             }
                         
 
@@ -268,13 +273,18 @@ namespace CarSureBotDotNet
                 }
                 else
                 {
-                    string currentStep = _keyPrompts[$"step{currentSession.keyStepOrder/*-1*/}"];
+                    string currentStep = _keyPrompts[$"step{currentSession.keyStepOrder}"];
 
                     //exceptional key prompts that are not included in dictionary _keyPrompts and do not handling by TextHandler
                     if (currentSession.keyStepOrder == 2) currentStep = _keyPrompts[$"step{currentSession.keyStepOrder}"];
 
-                    if ((currentSession.photoSentIterator - 1) == 0) currentStep = "Send your personal id";
-                    if ((currentSession.photoSentIterator - 1) == 1) currentStep = "Send your Front side of vehicle id";
+                    if(isGroup != "group")
+                    {
+                        if ((currentSession.photoSubStepIterator - 1) == 0) currentStep = "Send your personal id";
+                        if ((currentSession.photoSubStepIterator - 1) == 1) currentStep = "Send your Front side of vehicle id";
+                    }
+                    else { currentStep = "Send your personal ID"; }
+                    
                     if (currentSession.keyStepOrder == 7) currentStep = _keyPrompts[$"step{currentSession.keyStepOrder}"];
 
                     prompt += $" And shortly remind user what he has to do now. Current step: {currentStep}. Say it more alive, like a human, not machine";
@@ -283,7 +293,7 @@ namespace CarSureBotDotNet
 
 
                 //formating text by cutting "false"/"rollback" markers
-                gptResponse = (gptResponse.Split().Last() == "rollback" | gptResponse.Split().Last() == "group") ? gptResponse = gptResponse.Substring(gptResponse.LastIndexOf(' ')) : gptResponse;
+                gptResponse = (gptResponse.Split().Last() == "rollback" || gptResponse.Split().Last() == "group") ? gptResponse = Regex.Replace(gptResponse, @"\s+\S+$", "") : gptResponse;
                 gptResponse = (gptResponse.Split()[0] == "false" || gptResponse.Split()[0] == "null" || gptResponse.Split()[0] == "true") ? gptResponse = gptResponse.Substring(gptResponse.IndexOf(' ') + 1) : gptResponse;
                 
                 await _botClient.SendMessage(currentSession.ChatId, gptResponse);
@@ -298,13 +308,13 @@ namespace CarSureBotDotNet
             Console.WriteLine($"A photo message recieved from {message.Chat.Username}");
             try
             {
-                if (currentSession.keyStepOrder == 2)
+                if (currentSession.keyStepOrder == 2 && currentSession.isDataConfirmed) //if isDataConfirmed = false, we prevent reading from another photo before confirmation of previous one
                 {
 
                     string gptResponse;
 
                     //related to pattern definition written below
-                    if (message.MediaGroupId != null && currentSession.photoSentIterator == 0)
+                    if (message.MediaGroupId != null && currentSession.photoSubStepIterator == 0)
                     {
                         gptResponse = await OpenAiResponseAsync(currentSession, "Tell that now you processing all photos automatically because fotos been sent in group. And finish with 3 dots for view.");
                         await _botClient.SendMessage(currentSession.ChatId, gptResponse);
@@ -312,18 +322,18 @@ namespace CarSureBotDotNet
 
                     //extract photo from message
                     var photoBytes = await ExtractPhoto(message.Photo.Last());
-                    string mindeeResponseText = await _mindeeService.GetTextData(photoBytes, currentSession.photoSentIterator);
+                    string mindeeResponseText = await _mindeeService.GetTextData(photoBytes, currentSession.photoSubStepIterator);
                     
 
                     //saving read document fields for future policy generation
                     var chatIdKey = currentSession.ChatId;
                     if (currentSession.userDocumentData.Any(x => x.Key == chatIdKey))
                     {
-                        currentSession.userDocumentData[chatIdKey] += mindeeResponseText;
+                        currentSession.userDocumentData[chatIdKey][currentSession.photoSubStepIterator] = "\n\n" + mindeeResponseText;
                     }
                     else
                     {
-                        currentSession.userDocumentData.Add(currentSession.ChatId, mindeeResponseText);
+                        currentSession.userDocumentData.Add(currentSession.ChatId, new Dictionary<short, string> { { currentSession.photoSubStepIterator, mindeeResponseText } });
                     }
 
                     //sending read text to bot
@@ -333,12 +343,21 @@ namespace CarSureBotDotNet
                     await _botClient.SendMessage(currentSession.ChatId, gptResponse);
 
                     //defining which pattern of confirmation to use depends of photos bundles: single photo or mediaGrouId 
-                    if (message.MediaGroupId == null) await InitStep(currentSession, 3);
-                    else if (message.MediaGroupId != null && currentSession.photoSentIterator == 1) await InitStep(currentSession, 31);
+                    if (message.MediaGroupId == null)
+                    {
+                        currentSession.isDataConfirmed = false;
+                        await InitStep(currentSession, 3);
+                    }
+                    else if (message.MediaGroupId != null && currentSession.photoSubStepIterator == 1)
+                    {
+                        currentSession.isDataConfirmed = false;
+                        await InitStep(currentSession, 31);
+                    }
 
 
 
-                    currentSession.photoSentIterator++;
+                    
+                    currentSession.photoSubStepIterator++;
                     
 
                 }
@@ -360,8 +379,8 @@ namespace CarSureBotDotNet
             //extensions of initialization for steps
             if (keyStepOrder == 21)
             {
-                if (currentSession.photoSentIterator == 0) prompt = prompt.Replace("DOCUMENT_NAME", "Personal id(id card)");
-                if (currentSession.photoSentIterator == 1) prompt = prompt.Replace("DOCUMENT_NAME", "Front side of vehicle id");
+                if (currentSession.photoSubStepIterator == 0) prompt = prompt.Replace("DOCUMENT_NAME", "Personal id(id card)");
+                if (currentSession.photoSubStepIterator == 1) prompt = prompt.Replace("DOCUMENT_NAME", "Front side of vehicle id");
                 gptResponse = await OpenAiResponseAsync(currentSession, prompt);
                 await _botClient.SendMessage(currentSession.ChatId, gptResponse);
                 return;
@@ -426,9 +445,10 @@ namespace CarSureBotDotNet
         {
 
             string prompt = _keyPrompts["step6"] + "\n" + currentSession.ToStringUserDocumentData();
+            string userDocumentData = new string(' ', 64) + "CAR INSURANCE POLICY\r\n" + currentSession.ToStringUserDocumentData() + $"\n{DateTime.Now.ToString("dd.MM.yyyy, HH:mm")}";
             Console.WriteLine("Document prompt: " + prompt);
-            string gptResponse = await OpenAiResponseAsync(currentSession, prompt);
-            Console.WriteLine("Document content: " + gptResponse);
+            //string gptResponse = await OpenAiResponseAsync(currentSession, prompt);
+            //Console.WriteLine("Document content: " + gptResponse);
 
             
             using (var stream = new MemoryStream())
@@ -454,7 +474,7 @@ namespace CarSureBotDotNet
                     double lineHeight = font.GetHeight() + 2;
                     double yPoint = margin;
 
-                    string[] lines = gptResponse.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                    string[] lines = userDocumentData.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
 
                     foreach (string line in lines)
                     {
