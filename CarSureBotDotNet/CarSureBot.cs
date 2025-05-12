@@ -260,6 +260,7 @@ namespace CarSureBotDotNet
 
                                 currentSession.keyStepOrder++;
                                 await GenerateAndSendPDF(currentSession);
+                                await InitStep(currentSession, 61);
                                 currentSession.keyStepOrder++;
 
                                 await InitStep(currentSession, currentSession.keyStepOrder);
@@ -370,14 +371,14 @@ namespace CarSureBotDotNet
             catch (Exception ex) { Console.WriteLine("UpdatePhotoMessageHandler(): " + ex.ToString()); }
         }
 
-        private async Task InitStep(UserSession currentSession, short keyStepOrder)
+        private async Task InitStep(UserSession currentSession, short customKeyStepOrder)
         {
 
-            var prompt = _keyPrompts[$"step{keyStepOrder}"];
+            var prompt = _keyPrompts[$"step{customKeyStepOrder}"];
             var gptResponse = await OpenAiResponseAsync(currentSession, prompt);
 
             //extensions of initialization for steps
-            if (keyStepOrder == 21)
+            if (customKeyStepOrder == 21)
             {
                 if (currentSession.photoSubStepIterator == 0) prompt = prompt.Replace("DOCUMENT_NAME", "Personal id(id card)");
                 if (currentSession.photoSubStepIterator == 1) prompt = prompt.Replace("DOCUMENT_NAME", "Front side of vehicle id");
@@ -434,6 +435,7 @@ namespace CarSureBotDotNet
                            " If disagrees, YOUR next message starts with \"false\". IF user's response sounds not related to the question, politely insist on direct response. And start answer with \"null\". Keep going with these start words until user's positive answer." + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step5", "Now our step is to generate an insurance policy file if user agreed with the price. Say that you generating a file and finish sentence with three dots. " + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step6", "Generate a structured text document in Makefile format that represents an auto insurance policy.(ONLY Makefile, do not add any additional text from you please) Use these fields: ");
+            dictionary.Add("step61", "Take a note that user sould open this file only as PDF" + _botMessageEmojiStatus["Green"]);
             dictionary.Add("step7", "Say that we've done, ask if he has some questions and tell him that if he wants to repeat the procedure, he has to send you \"/start\" command." + _botMessageEmojiStatus["Green"]);
             dictionary.Add("error1", "Say that some problem occured while processing message." + _botMessageEmojiStatus["Red"]);
             dictionary.Add("error2", "Say that you can handle only text and photo messages." + _botMessageEmojiStatus["Red"]);
